@@ -462,6 +462,10 @@ class WebDriver:
         self._get_output(["sudo", "rm", "-rf", "/System/Library/Extensions/GeForce*Web.*", "/System/Library/Extensions/NVDA*Web.kext"], True)
         print("Clearing web drivers from /L/E...\n")
         self._get_output(["sudo", "rm", "-rf", "/Library/Extensions/GeForce*Web.kext", "/Library/Extensions/NVDA*Web.kext"], True)
+        # Rebuild kextcache
+        print("Rebuilding kext cache...\n")
+        self._stream_output(["sudo", "kextcache", "-i", "/"])
+        print(" ")
         print("Done.")
         time.sleep(5)
 
