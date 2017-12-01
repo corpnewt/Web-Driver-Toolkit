@@ -20,6 +20,7 @@ class WebDriver:
         self.os_build_number = None
         self.os_number = None
         self.wd_loc = None
+        self.sip_checked = False
         self.installed_version = "Not Installed!"
 
         self.get_manifest()
@@ -61,6 +62,47 @@ class WebDriver:
                     break
         except:
             return
+
+    def check_sip(self):
+        # Checks our sip status and warns if needed
+        sip_stats = self._get_output(["csrutil", "status"])
+        msg = "Unknown SIP Configuration!\n"
+        title = "Unknown"
+        if not sip_stats.startswith("System Integrity Protection status:"):
+            # Error getting SIP status
+            return None
+        if sip_stats == "System Integrity Protection status: disabled.":
+            # SIP is disabled - return true to imply we have the "go ahead"
+            return True
+        if sip_stats.startswith("System Integrity Protection status: enabled (Custom Configuration)."):
+            # SIP is partially enabled - determine if fs protection and kext signing is disabled
+            if "Filesystem Protections: disabled" in sip_stats and "Kext Signing: disabled" in sip_stats:
+                # Still good - let's roll
+                return True
+            title = "Partially Disabled"
+            msg = "SIP is only partially disabled!\nKext signing and/or fs protection are eanbled!\n"
+            
+        if sip_stats == "System Integrity Protection status: enabled.":
+            # SIP is enabled completely
+            title = "Enabled"
+            msg = "System Integrity Protection is completely enabled!\n"
+        self.head("SIP Is " + title)
+        print(" ")
+        print(msg)
+        print("This may prevent the web drivers from being patched or loading.")
+        print(" ")
+        menu = self.grab("Would you like to continue? (y/n):  ")
+
+        if not len(menu):
+            return self.check_sip()
+        
+        if menu[:1].lower() == "n":
+            return False
+        elif menu[:1].lower() == "y":
+            return True
+
+        return self.check_sip()
+        
 
     def check_path(self, path):
         # Add os checks for path escaping/quote stripping
@@ -277,6 +319,14 @@ class WebDriver:
         return
 
     def restore_backup(self):
+        if not self.sip_checked:
+            res = self.check_sip()
+            if res == None or res == True:
+                # Likely on Yosemite?
+                self.sip_checked = True
+            else:
+                return
+
         self.head("Restoring Backup Info.plist")
         print(" ")
         if not os.path.exists(self.wd_loc + "/Contents/Info.plist.bak"):
@@ -316,6 +366,14 @@ class WebDriver:
         return
 
     def set_build(self, build_number):
+        if not self.sip_checked:
+            res = self.check_sip()
+            if res == None or res == True:
+                # Likely on Yosemite?
+                self.sip_checked = True
+            else:
+                return
+
         self.head("Setting NVDARequiredOS to {}".format(build_number))
         print(" ")
         os.chdir(os.path.dirname(os.path.realpath(__file__)))
