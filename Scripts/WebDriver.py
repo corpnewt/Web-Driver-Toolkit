@@ -15,6 +15,19 @@ else:
 class WebDriver:
 
     def __init__(self):
+
+        # Check the OS first
+        if not str(sys.platform) == "darwin":
+            self.head("Incompatible System")
+            print(" ")
+            print("This script can only be run from macOS/OS X.")
+            print(" ")
+            print("The current running system is \"{}\".".format(sys.platform))
+            print(" ")
+            self.grab("Press [enter] to quit...")
+            print(" ")
+            exit(1)
+
         self.dl = Downloader.Downloader()
         self.web_drivers = None
         self.os_build_number = None
