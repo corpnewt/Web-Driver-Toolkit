@@ -35,6 +35,7 @@ class WebDriver:
             self.wd_loc = None
 
     def _get_output(self, comm, shell = False):
+        c = "Command not found!"
         try:
             if shell:
                 if type(comm) is list:
@@ -49,6 +50,8 @@ class WebDriver:
                 return c[1].decode("utf-8")
             return c[0].decode("utf-8")
         except:
+            if c == "Command not found!":
+                return c
             return c[1].decode("utf-8")
 
     def _stream_output(self, comm):
