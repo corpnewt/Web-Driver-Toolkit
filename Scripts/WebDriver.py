@@ -6,6 +6,7 @@ import Downloader
 import tempfile
 import shutil
 import subprocess
+import re
 # Python-aware urllib stuff
 if sys.version_info >= (3, 0):
     from urllib.request import urlopen
@@ -47,41 +48,95 @@ class WebDriver:
         else:
             self.wd_loc = None
 
-    def _get_output(self, comm, shell = False):
-        c = "Command not found!"
+    def _stream_output(self, comm, shell = False):
+        output = ""
         try:
-            if shell:
-                if type(comm) is list:
-                    comm = " ".join(comm)
-                p = subprocess.Popen(comm, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            else:
-                if type(comm) is str():
-                    comm = comm.split()
-                p = subprocess.Popen(comm, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            c = p.communicate()
-            if not p.returncode == 0:
-                return c[1].decode("utf-8")
-            return c[0].decode("utf-8")
-        except:
-            if c == "Command not found!":
-                return c
-            return c[1].decode("utf-8")
-
-    def _stream_output(self, comm):
-        try:
-            p = subprocess.Popen(comm, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+            if shell and type(comm) is list:
+                comm = " ".join(comm)
+            if not shell and type(comm) is str:
+                comm = comm.split()
+            p = subprocess.Popen(comm, shell=shell, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
             while True:
                 stdoutdata = p.stdout.readline()
                 if stdoutdata:
+                    output += stdoutdata.decode("utf-8")
                     sys.stdout.write(stdoutdata.decode("utf-8"))
                 else:
                     break
+            return output
         except:
-            return
+            return output
+
+    def _run_command(self, comm, shell = False):
+        c = None
+        try:
+            if shell and type(comm) is list:
+                comm = " ".join(comm)
+            if not shell and type(comm) is str:
+                comm = comm.split()
+            p = subprocess.Popen(comm, shell=shell, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            c = p.communicate()
+            return (c[0].decode("utf-8"), c[1].decode("utf-8"), p.returncode)
+        except:
+            if c == None:
+                return ("", "Command not found!", 1)
+            return (c[0].decode("utf-8"), c[1].decode("utf-8"), p.returncode)
+
+    def run(self, command_list, leave_on_fail = False):
+        # Command list should be an array of dicts
+        if type(command_list) is dict:
+            # We only have one command
+            command_list = [command_list]
+        output_list = []
+        for comm in command_list:
+            args   = comm.get("args",   [])
+            shell  = comm.get("shell",  False)
+            stream = comm.get("stream", False)
+            sudo   = comm.get("sudo",   False)
+            stdout = comm.get("stdout", False)
+            stderr = comm.get("stderr", False)
+            mess   = comm.get("message", None)
+            
+            if not mess == None:
+                print(mess)
+
+            if not len(args):
+                # nothing to process
+                continue
+            if sudo:
+                # Check if we have sudo
+                out = self._run_command(["which", "sudo"])
+                if "sudo" in out[0]:
+                    # Can sudo
+                    args.insert(0, "sudo")
+            
+            if stream:
+                # Stream it!
+                out = self._stream_output(args, shell)
+            else:
+                # Just run and gather output
+                out = self._run_command(args, shell)
+                if stdout and len(out[0]):
+                    print(out[0])
+                if stderr and len(out[1]):
+                    print(out[1])
+            # Append output
+            if type(out) is str:
+                # We streamed - assume success?
+                out = ( out, "", 0 )
+            output_list.append(out)
+            # Check for errors
+            if leave_on_fail and out[2] != 0:
+                # Got an error - leave
+                break
+        if len(output_list) == 1:
+            # We only ran one command - just return that output
+            return output_list[0]
+        return output_list
 
     def check_sip(self):
         # Checks our sip status and warns if needed
-        sip_stats = self._get_output(["csrutil", "status"])
+        sip_stats = self.run({"args" : ["csrutil", "status"]})[0]
         msg = "Unknown SIP Configuration!\n"
         title = "Unknown"
         if not sip_stats.startswith("System Integrity Protection status:"):
@@ -181,8 +236,8 @@ class WebDriver:
 
     def get_system_info(self):
         self.installed_version = "Not Installed!"
-        self.os_build_number = self._get_output(["sw_vers", "-buildVersion"]).strip()
-        self.os_number       = self._get_output(["sw_vers", "-productVersion"]).strip()
+        self.os_build_number = self.run({"args" : ["sw_vers", "-buildVersion"]})[0].strip()
+        self.os_number       = self.run({"args" : ["sw_vers", "-productVersion"]})[0].strip()
         if self.wd_loc:
             info_plist = plistlib.readPlist(self.wd_loc + "/Contents/Info.plist")            
             self.installed_version = info_plist["CFBundleGetInfoString"].split(" ")[-1].replace("(", "").replace(")", "")
@@ -220,7 +275,7 @@ class WebDriver:
         dl_file = self.dl.stream_to_file(dl_update["downloadURL"], dl_update["downloadURL"].split("/")[-1])
         if dl_file:
             print(dl_file + " downloaded successfully!")
-            self._get_output(["open", os.getcwd()])
+            self.run({"args":["open", os.getcwd()]})
             time.sleep(5)
 
     def format_table(self, items, columns):
@@ -229,9 +284,25 @@ class WebDriver:
         row_list = [[]]
         cur_list = []
         msg = ""
-        sorted_list = sorted(items)
+        # Let's break things up and give a numerical value
+        alpha = "abcdefghijklmnopqrstuvwxyz"
+        new_items = []
+        for i in items:
+            # Split them up
+            split = re.findall(r"[^\W\d_]+|\d+", i)
+            start = split[0].rjust(4, "0")
+            alph  = split[1]
+            end   = split[2].rjust(6, "0")
+            alpha_num = str(alpha.index(alph.lower())).rjust(2, "0")
+            value = int(start + alpha_num + end)
+            new_items.append({"build" : i, "value" : value})
+
+        # Sort by numeric value instead of general build number
+        # This is helpful in cases where 17B48 comes before 17B1002
+        # even though 4 > 1
+        sorted_list = sorted(new_items, key=lambda x:x["value"])
         for key in sorted_list:
-            entry = key
+            entry = key["build"]
             if len(entry) > max_length:
                 max_length = len(entry)
             row_list[len(row_list)-1].append(entry)
@@ -350,17 +421,35 @@ class WebDriver:
             print("Backup doesn't exist...")
             time.sleep(5)
             return
-        # Removing
-        print("Removing " + self.wd_loc + "/Contents/Info.plist...\n")
-        self._get_output(["sudo", "rm", self.wd_loc + "/Contents/Info.plist"])
-        print("Renaming Info.plist.bak to Info.plist...\n")
-        self._get_output(["sudo", "mv", "-f", self.wd_loc + "/Contents/Info.plist.bak", self.wd_loc + "/Contents/Info.plist"])
-        print("Updating ownership and permissions...\n")
-        self._get_output(["sudo", "chown", "0:0", self.wd_loc + "/Contents/Info.plist"])
-        self._get_output(["sudo", "chmod", "755", self.wd_loc + "/Contents/Info.plist"])
-        # Rebuild kextcache
-        print("Rebuilding kext cache...\n")
-        self._stream_output(["sudo", "kextcache", "-i", "/"])
+        # Doing things
+        c = [
+            { 
+                "args" : ["rm", self.wd_loc + "/Contents/Info.plist"], 
+                "sudo" : True, 
+                "message" : "Removing " + self.wd_loc + "/Contents/Info.plist...\n" 
+            },
+            { 
+                "args" : ["sudo", "mv", "-f", self.wd_loc + "/Contents/Info.plist.bak", self.wd_loc + "/Contents/Info.plist"], 
+                "sudo" : True,
+                "message" : "Renaming Info.plist.bak to Info.plist...\n"
+            },
+            { 
+                "args" : ["sudo", "chown", "0:0", self.wd_loc + "/Contents/Info.plist"], 
+                "sudo" : True, 
+                "message" : "Updating ownership and permissions...\n" 
+            },
+            { 
+                "args" : ["sudo", "chmod", "755", self.wd_loc + "/Contents/Info.plist"], 
+                "sudo" : True
+            },
+            { 
+                "args" : ["sudo", "kextcache", "-i", "/"], 
+                "sudo" : True,
+                "stream" : True,
+                "message" : "Rebuilding kext cache...\n" 
+            }
+        ]
+        self.run(c, True)
         print(" ")
         print("Done.")
         time.sleep(5)
@@ -376,7 +465,7 @@ class WebDriver:
             return
         # Removing
         print("Removing " + self.wd_loc + "/Contents/Info.plist.bak...\n")
-        self._get_output(["sudo", "rm", self.wd_loc + "/Contents/Info.plist.bak"])
+        self.run({"args":["rm", self.wd_loc + "/Contents/Info.plist.bak"],"sudo":True})
         print("Done.")
         time.sleep(5)
         return
@@ -394,11 +483,17 @@ class WebDriver:
         print(" ")
         os.chdir(os.path.dirname(os.path.realpath(__file__)))
 
+        # Start our command list
+        c = []
+
         info_plist = plistlib.readPlist(self.wd_loc + "/Contents/Info.plist")
         if not os.path.exists(self.wd_loc + "/Contents/Info.plist.bak"):
             # Create a backup
-            print("Creating backup...\n")
-            self._get_output(["sudo", "cp", self.wd_loc + "/Contents/Info.plist", self.wd_loc + "/Contents/Info.plist.bak"])
+            self.run({
+                "args" : ["cp", self.wd_loc + "/Contents/Info.plist", self.wd_loc + "/Contents/Info.plist.bak"],
+                "sudo" : True,
+                "message" : "Creating backup...\n"
+            })
             # plistlib.writePlist(info_plist, self.wd_loc + "/Contents/Info.plist.bak")
         # Change the build number and write to the main plist
         print("Patching plist for build \"{}\"...\n".format(build_number))
@@ -407,18 +502,32 @@ class WebDriver:
         temp_folder = tempfile.mkdtemp()
         # Write the changes
         plistlib.writePlist(info_plist, temp_folder + "/Info.plist")
-        # Copy over
-        self._get_output(["sudo", "mv", "-f", temp_folder + "/Info.plist", self.wd_loc + "/Contents/Info.plist"])
+        # Build and run commands
+        c = [
+            {
+                "args" : ["mv", "-f", temp_folder + "/Info.plist", self.wd_loc + "/Contents/Info.plist"],
+                "sudo" : True
+            },
+            {
+                "args" : ["chown", "0:0", self.wd_loc + "/Contents/Info.plist"],
+                "sudo" : True,
+                "message" : "Updating ownership and permissions...\n"
+            },
+            {
+                "args" : ["chmod", "755", self.wd_loc + "/Contents/Info.plist"],
+                "sudo" : True
+            },
+            {
+                "args" : ["kextcache", "-i", "/"],
+                "sudo" : True,
+                "stream" : True,
+                "message" : "Rebuilding kext cache...\n"
+            }
+        ]
+        self.run(c, True)
         # Remove temp
         if os.path.exists(temp_folder):
             shutil.rmtree(temp_folder)
-        # Ensure perms and ownership are set right
-        print("Updating ownership and permissions...\n")
-        self._get_output(["sudo", "chown", "0:0", self.wd_loc + "/Contents/Info.plist"])
-        self._get_output(["sudo", "chmod", "755", self.wd_loc + "/Contents/Info.plist"])
-        # Rebuild kextcache
-        print("Rebuilding kext cache...\n")
-        self._stream_output(["sudo", "kextcache", "-i", "/"])
         print(" ")
         print("Done.")
         time.sleep(5)
@@ -504,9 +613,12 @@ class WebDriver:
         self.head("Patching Install Package")
         print(" ")
         script_path = os.path.dirname(os.path.realpath(__file__))
-        print(script_path)
         print("Expanding package...\n")
-        self._get_output(["pkgutil", "--expand", package, temp + "/package"])
+        stat = self.run({"args" : ["pkgutil", "--expand", package, temp + "/package"]})[2]
+        if not stat == 0:
+            print("Something went wrong!\n")
+            print(stat[1])
+            return
         new_dist = ""
         print("Patching Distribution...\n")
         with open(temp + "/package/Distribution") as f:
@@ -524,18 +636,18 @@ class WebDriver:
         print("Repacking...\n")
         os.chdir(os.path.dirname(os.path.realpath(__file__)))
         os.chdir("../Web Drivers/Patched/")
-        self._get_output(["pkgutil", "--flatten", temp + "/package", os.getcwd() + "/" + os.path.basename(package)[:-4] + " (Patched).pkg"])
+        self.run({"args" : ["pkgutil", "--flatten", temp + "/package", os.getcwd() + "/" + os.path.basename(package)[:-4] + " (Patched).pkg"]})
         print("Done.")
-        self._get_output(["open", os.getcwd()])
+        self.run({"args":["open", os.getcwd()]})
         time.sleep(5)
 
     def remove_drivers(self):
         self.head("Removing Web Drivers")
         print(" ")
         print("Clearing web drivers from /S/L/E...\n")
-        self._get_output(["sudo", "rm", "-rf", "/System/Library/Extensions/GeForce*Web.*", "/System/Library/Extensions/NVDA*Web.kext"], True)
+        self.run({"args":["sudo", "rm", "-rf", "/System/Library/Extensions/GeForce*Web.*", "/System/Library/Extensions/NVDA*Web.kext"], "shell" : True})
         print("Clearing web drivers from /L/E...\n")
-        self._get_output(["sudo", "rm", "-rf", "/Library/Extensions/GeForce*Web.kext", "/Library/Extensions/NVDA*Web.kext"], True)
+        self.run({"args":["sudo", "rm", "-rf", "/Library/Extensions/GeForce*Web.kext", "/Library/Extensions/NVDA*Web.kext"], "shell" : True})
         # Rebuild kextcache
         print("Rebuilding kext cache...\n")
         self._stream_output(["sudo", "kextcache", "-i", "/"])
