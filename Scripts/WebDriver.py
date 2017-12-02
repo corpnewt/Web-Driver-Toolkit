@@ -614,8 +614,8 @@ class WebDriver:
         print(" ")
         script_path = os.path.dirname(os.path.realpath(__file__))
         print("Expanding package...\n")
-        stat = self.run({"args" : ["pkgutil", "--expand", package, temp + "/package"]})[2]
-        if not stat == 0:
+        stat = self.run({"args" : ["pkgutil", "--expand", package, temp + "/package"]})
+        if not stat[2] == 0:
             print("Something went wrong!\n")
             print(stat[1])
             return
