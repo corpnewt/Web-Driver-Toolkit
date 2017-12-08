@@ -766,8 +766,8 @@ class WebDriver:
                 "Comment" : "Nvidia {} to {}".format(current_build, build),
                 "InfoPlistPatch" : True,
                 "Disabled" : False,
-                "Find" : self.get_base(find_text),
-                "Replace" : self.get_base(repl_text)
+                "Find" : self.get_base(find_text).encode("utf-8"),
+                "Replace" : self.get_base(repl_text).encode("utf-8")
             }
             if sys.version_info >= (3, 0):
                 plist_string = plistlib.dumps(plist_dict).decode("utf-8")
