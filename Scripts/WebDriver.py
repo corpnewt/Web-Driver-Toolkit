@@ -740,6 +740,8 @@ class WebDriver:
         if menu[:1].lower() == "m":
             self.main()
             return
+        elif menu[:1].lower() == "c":
+            return
         elif menu[:1].lower() == "q":
             self.custom_quit()
         elif menu[:1].lower() == "b":
