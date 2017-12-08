@@ -7,6 +7,8 @@ import tempfile
 import shutil
 import subprocess
 import re
+import base64
+import binascii
 # Python-aware urllib stuff
 if sys.version_info >= (3, 0):
     from urllib.request import urlopen
@@ -655,6 +657,130 @@ class WebDriver:
         print("Done.")
         time.sleep(5)
 
+    def config_menu(self):
+        self.head("Config.plist Patch Menu")
+        print(" ")
+        os.chdir(os.path.dirname(os.path.realpath(__file__)))
+        if not self.wd_loc:
+            print("NVDAStartupWeb.kext was not found in either /L/E or /S/L/E!\n")
+            print("Please make sure you have the Web Drivers installed.")
+            time.sleep(5)
+            return
+        info_plist = plistlib.readPlist(self.wd_loc + "/Contents/Info.plist")
+        current_build = info_plist.get("IOKitPersonalities", {}).get("NVDAStartup", {}).get("NVDARequiredOS", None)
+
+        print("OS Build Number:  {}".format(self.os_build_number))
+        print("WD Target Build:  {}".format(current_build))
+        print(" ")
+        print("C. Current Build Number")
+        print(" ")
+        print("M. Main Menu")
+        print("Q. Quit")
+        print(" ")
+
+        menu = self.grab("Please make a selection (or type a custom build number):  ")
+
+        if not len(menu):
+            self.config_menu()
+            return
+
+        if menu[:1].lower() == "m":
+            return
+        elif menu[:1].lower() == "q":
+            self.custom_quit()
+        elif menu[:1].lower() == "c":
+            self.type_menu(self.os_build_number)
+        else:
+            self.type_menu(menu)
+        self.config_menu()
+        return
+
+    def type_menu(self, build):
+        self.head("Config.plist Patch: {}".format(build))
+        print(" ")
+        os.chdir(os.path.dirname(os.path.realpath(__file__)))
+        if not self.wd_loc:
+            print("NVDAStartupWeb.kext was not found in either /L/E or /S/L/E!\n")
+            print("Please make sure you have the Web Drivers installed.")
+            time.sleep(5)
+            return
+        info_plist = plistlib.readPlist(self.wd_loc + "/Contents/Info.plist")
+        current_build = info_plist.get("IOKitPersonalities", {}).get("NVDAStartup", {}).get("NVDARequiredOS", None)
+        if build == current_build:
+            print("Both builds are the same - this defeats the purpose of the patch.")
+            time.sleep(5)
+            return
+        print("B. Show Base64 Values")
+        print("H. Show Hex Values")
+        print("P. Show Plist Patch")
+        print(" ")
+        print("M. Main Menu")
+        print("C. Config.plist Patch Menu")
+        print("Q. Quit")
+        print(" ")
+        menu = self.grab("Please make a selection:  ")
+
+        if not len(menu):
+            self.config_menu()
+            return
+
+        display_text = data_type = ""
+
+        if menu[:1].lower() == "m":
+            self.main()
+            return
+        elif menu[:1].lower() == "q":
+            self.custom_quit()
+        elif menu[:1].lower() == "b":
+            data_type = "Base64"
+            display_text += "Name:      NVDAStartupWeb\n"
+            display_text += "Disabled:  False\n"
+            display_text += "Find:      {}\n".format(self.get_base(current_build))
+            display_text += "Replace:   {}\n".format(self.get_base(build))
+            display_text += "InfoPlist: True"
+        elif menu[:1].lower() == "h":
+            data_type = "Hex"
+            display_text += "Name:      NVDAStartupWeb\n"
+            display_text += "Disabled:  False\n"
+            display_text += "Find:      {}\n".format(self.get_hex(current_build))
+            display_text += "Replace:   {}\n".format(self.get_hex(build))
+            display_text += "InfoPlist: True"
+        elif menu[:1].lower() == "p":
+            # Get some plist wizardry
+            data_type = "Plist"
+            plist_dict = {
+                "Name" : "NVDAStartupWeb",
+                "Comment" : "Nvidia {} to {}".format(current_build, build),
+                "InfoPlistPatch" : True,
+                "Disabled" : False,
+                "Find" : self.get_base(current_build),
+                "Replace" : self.get_base(build)
+            }
+            if sys.version_info >= (3, 0):
+                plist_string = plistlib.dumps(plist_dict).decode("utf-8")
+            else:
+                plist_string = plistlib.writePlistToString(plist_dict)
+            # Trim the plist
+            display_text = "\n".join(plist_string.split("\n")[3:-2])
+        
+        if len(display_text):
+            self.head("Config.plist Patch: {}".format(build))
+            print(" ")
+            print("Your {} Data:\n".format(data_type))
+            print(display_text)
+            print(" ")
+            self.grab("Press [enter] to return...")
+        self.type_menu(build)
+        return
+        
+    def get_base(self, value):
+        return base64.b64encode(value.encode("utf-8")).decode("utf-8")
+
+    def get_hex(self, value):
+        text = binascii.hexlify(value.encode("utf-8")).decode("utf-8")
+        text_list = re.findall('........?', text)
+        return " ".join(text_list)
+
     def main(self):
         self._check_info()
         self.get_system_info()
@@ -694,6 +820,7 @@ class WebDriver:
         print("B. Download By Build Number")
         print("R. Remove Web Drivers")
         print("U. Update Manifest")
+        print("C. Config.plist Patch Menu")
         print("")
         print("Q. Quit")
         print(" ")
@@ -717,6 +844,8 @@ class WebDriver:
             self.get_manifest()
         elif menu[:1].lower() == "r":
             self.remove_drivers()
+        elif menu[:1].lower() == "c":
+            self.config_menu()
         
         return
 
