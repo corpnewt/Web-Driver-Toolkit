@@ -790,7 +790,7 @@ class WebDriver:
         return base64.b64encode(value.encode("utf-8")).decode("utf-8")
     
     def get_base_data(self, value):
-        return base64.b64encode(value)
+        return base64.b64encode(value.encode("utf-8"))
 
     def get_hex(self, value):
         text = binascii.hexlify(value.encode("utf-8")).decode("utf-8")
