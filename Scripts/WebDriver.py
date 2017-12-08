@@ -706,6 +706,15 @@ class WebDriver:
             return
         info_plist = plistlib.readPlist(self.wd_loc + "/Contents/Info.plist")
         current_build = info_plist.get("IOKitPersonalities", {}).get("NVDAStartup", {}).get("NVDARequiredOS", None)
+        if len(current_build) < len(build):
+            # No amount of padding can save us
+            print("Due to the nature of Clover's kext/Info.plist patching - the source and".format(current_build))
+            print("target build numbers need to be the same length, or - with a padding")
+            print("workaround, the target build number can be shorter.")
+            print(" ")
+            print("Manually patching the Info.plist is likely a better solution here.")
+            time.sleep(5)
+            return
         if build == current_build:
             print("Both builds are the same - this defeats the purpose of the patch.")
             time.sleep(5)
@@ -725,6 +734,8 @@ class WebDriver:
             return
 
         display_text = data_type = ""
+        find_text = "<string>{}</string>".format(current_build)
+        repl_text = "<string>{}</string>".format(build).rjust(len(find_text), " ")
 
         if menu[:1].lower() == "m":
             self.main()
@@ -734,16 +745,18 @@ class WebDriver:
         elif menu[:1].lower() == "b":
             data_type = "Base64"
             display_text += "Name:      NVDAStartupWeb\n"
+            display_text += "Comment:   Nvidia {} to {}\n".format(current_build, build)
             display_text += "Disabled:  False\n"
-            display_text += "Find:      {}\n".format(self.get_base(current_build))
-            display_text += "Replace:   {}\n".format(self.get_base(build))
+            display_text += "Find:      {}\n".format(self.get_base(find_text))
+            display_text += "Replace:   {}\n".format(self.get_base(repl_text))
             display_text += "InfoPlist: True"
         elif menu[:1].lower() == "h":
             data_type = "Hex"
             display_text += "Name:      NVDAStartupWeb\n"
+            display_text += "Comment:   Nvidia {} to {}\n".format(current_build, build)
             display_text += "Disabled:  False\n"
-            display_text += "Find:      {}\n".format(self.get_hex(current_build))
-            display_text += "Replace:   {}\n".format(self.get_hex(build))
+            display_text += "Find:      {}\n".format(self.get_hex(find_text))
+            display_text += "Replace:   {}\n".format(self.get_hex(repl_text))
             display_text += "InfoPlist: True"
         elif menu[:1].lower() == "p":
             # Get some plist wizardry
@@ -753,8 +766,8 @@ class WebDriver:
                 "Comment" : "Nvidia {} to {}".format(current_build, build),
                 "InfoPlistPatch" : True,
                 "Disabled" : False,
-                "Find" : self.get_base(current_build),
-                "Replace" : self.get_base(build)
+                "Find" : self.get_base(find_text),
+                "Replace" : self.get_base(repl_text)
             }
             if sys.version_info >= (3, 0):
                 plist_string = plistlib.dumps(plist_dict).decode("utf-8")
