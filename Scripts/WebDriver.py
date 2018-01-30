@@ -176,7 +176,6 @@ class WebDriver:
 
         return self.check_sip()
         
-
     def check_path(self, path):
         # Loop until we either get a working path - or no changes
         count = 0
@@ -226,6 +225,7 @@ class WebDriver:
                 continue
             if path[0] == " " or path[0] == "  ":
                 path = path[1:]
+        return None
 
     # Helper methods
     def grab(self, prompt):
