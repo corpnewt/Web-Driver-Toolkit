@@ -178,14 +178,10 @@ class WebDriver:
         
 
     def check_path(self, path):
-        # We need to try all iterations of things I guess
-        #
-        # Let's do stuff semi-situationally aware, and then
-        # check for changes and go until we either get a valid
-        # path, or are making no changes
-
         # Loop until we either get a working path - or no changes
-        while True:
+        count = 0
+        while count < 100:
+            count += 1
             if not len(path):
                 # We uh.. stripped out everything - bail
                 return None
@@ -203,18 +199,33 @@ class WebDriver:
                     # We got a change
                     path = test_path
                     continue
-            # Here we try stripping spaces, then escapes
-            test_path = path.strip()
-            if test_path != path:
-                path = test_path
-                continue
+            # If we have no spaces to trim - bail
+            if not (path[0] == " " or path[0] == "  ") and not(path[-1] == " " or path[-1] == " "):
+                return None
+            # Here we try stripping spaces/tabs
+            test_path = path
+            t_count = 0
+            while t_count < 100:
+                t_count += 1
+                t_path = test_path
+                while len(t_path):
+                    if os.path.exists(t_path):
+                        return os.path.abspath(t_path)
+                    if t_path[-1] == " " or t_path[-1] == "    ":
+                        t_path = t_path[:-1]
+                        continue
+                    break
+                if test_path[0] == " " or test_path[0] == " ":
+                    test_path = test_path[1:]
+                    continue
+                break
             # Escapes!
             test_path = "\\".join([x.replace("\\", "") for x in path.split("\\\\")])
-            if test_path != path:
+            if test_path != path and not (path[0] == " " or path[0] == "  "):
                 path = test_path
                 continue
-            # If we got here, we checked everything, and failed...
-            return None
+            if path[0] == " " or path[0] == "  ":
+                path = path[1:]
 
     # Helper methods
     def grab(self, prompt):
