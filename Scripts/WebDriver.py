@@ -178,30 +178,43 @@ class WebDriver:
         
 
     def check_path(self, path):
-        # Quote stripping is more complex, it seems.
-        # We're going to iterate until we don't find a single
-        # or double quote around our path at all
+        # We need to try all iterations of things I guess
+        #
+        # Let's do stuff semi-situationally aware, and then
+        # check for changes and go until we either get a valid
+        # path, or are making no changes
+
+        # Loop until we either get a working path - or no changes
         while True:
-            if path[0] == "'" and path[-1] == "'":
+            if not len(path):
+                # We uh.. stripped out everything - bail
+                return None
+            if os.path.exists(path):
+                # Exists!
+                return os.path.abspath(path)
+            # Check quotes first
+            if (path[0] == '"' and path[-1] == '"') or (path[0] == "'" and path[-1] == "'"):
                 path = path[1:-1]
                 continue
-            if path[0] == '"' and path[-1] == '"':
-                path = path[1:-1]
+            # Check for tilde
+            if path[0] == "~":
+                test_path = os.path.expanduser(path)
+                if test_path != path:
+                    # We got a change
+                    path = test_path
+                    continue
+            # Here we try stripping spaces, then escapes
+            test_path = path.strip()
+            if test_path != path:
+                path = test_path
                 continue
-            # No match
-            break
-        # Fun stuff to account for "\[anything]" as well as "\\"
-        path = "\\".join([x.replace("\\", "") for x in path.split("\\\\")])
-        # path = path.replace("\\ ", " ").replace("\\\\", "\\")
-        # Remove trailing space if drag and dropped
-        if path[-1] == " ":
-            path = path[:-1]
-        # Expand tilde
-        path = os.path.expanduser(path)
-        if not os.path.exists(path):
-            print("That file doesn't exist!")
+            # Escapes!
+            test_path = "\\".join([x.replace("\\", "") for x in path.split("\\\\")])
+            if test_path != path:
+                path = test_path
+                continue
+            # If we got here, we checked everything, and failed...
             return None
-        return path
 
     # Helper methods
     def grab(self, prompt):
