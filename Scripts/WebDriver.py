@@ -415,11 +415,7 @@ class WebDriver:
             return
         # We have . separated stuffs
         wd_list = [x for x in self.web_drivers.get("updates", []) if self.get_os(x["OS"]).startswith(menu)]
-        if len(wd_list) == 1:
-            # We got *one* match - just download it
-            self.download_for_build(wd_list[0]["OS"])
-            return
-        elif len(wd_list) == 0:
+        if len(wd_list) == 0:
             # No matches
             self.head("Searching For {}".format(menu))
             print(" ")
@@ -429,10 +425,10 @@ class WebDriver:
             self.build_search()
             return
         else:
-            # We got multiple matches
+            # We got at least one match
             m_title = menu
             while True:
-                self.head("Multiple Matches For {}".format(m_title))
+                self.head("Matches For {}".format(m_title))
                 print(" ")
                 index = 0
                 for i in wd_list:
@@ -443,7 +439,7 @@ class WebDriver:
                 print("M. Main Menu")
                 print("Q. Quit")
                 print(" ")
-                menu = self.grab("Please select a build:  ")
+                menu = self.grab("Please select a build to download:  ")
                 if not len(menu):
                     continue
                 if menu[:1].lower() == "s":
@@ -779,6 +775,8 @@ class WebDriver:
             self.head("Patch Install Package")
         print(" ")
         print("OS Build Number:  {}".format(self.os_build_number))
+        if build:
+            print("WD Target Build:  {}".format(build))
         print(" ")
         print("M. Main Menu")
         print("Q. Quit")
