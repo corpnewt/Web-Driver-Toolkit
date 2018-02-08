@@ -144,7 +144,7 @@ class WebDriver:
         if not sip_stats.startswith("System Integrity Protection status:"):
             # Error getting SIP status
             return None
-        if sip_stats == "System Integrity Protection status: disabled.":
+        if sip_stats.startswith("System Integrity Protection status: disabled."):
             # SIP is disabled - return true to imply we have the "go ahead"
             return True
         if sip_stats.startswith("System Integrity Protection status: enabled (Custom Configuration)."):
@@ -327,14 +327,7 @@ class WebDriver:
         alpha = "abcdefghijklmnopqrstuvwxyz"
         new_items = []
         for i in items:
-            # Split them up
-            split = re.findall(r"[^\W\d_]+|\d+", i)
-            start = split[0].rjust(4, "0")
-            alph  = split[1]
-            end   = split[2].rjust(6, "0")
-            alpha_num = str(alpha.index(alph.lower())).rjust(2, "0")
-            value = int(start + alpha_num + end)
-            new_items.append({"build" : i, "value" : value})
+            new_items.append({"build" : i, "value" : self.get_value(i)})
 
         # Sort by numeric value instead of general build number
         # This is helpful in cases where 17B48 comes before 17B1002
@@ -354,6 +347,121 @@ class WebDriver:
                 msg += entry + "  "
             msg += "\n"
         return msg
+
+    def get_os(self, build_number):
+        # Returns the best-guess OS version for the build number
+        alpha = "abcdefghijklmnopqrstuvwxyz"
+        os_version = "Unknown"
+        major = minor = ""
+        try:
+            # Formula looks like this:  AAB; AA - 4 = 10.## version
+            # B index in "ABCDEFGHIJKLMNOPQRSTUVXYZ" = 10.##.## version
+            split = re.findall(r"[^\W\d_]+|\d+", build_number)
+            major = int(split[0])-4
+            minor = alpha.index(split[1].lower())
+            os_version = "10.{}.{}".format(major, minor)
+        except:
+            pass
+        return os_version
+    
+    def get_value(self, build_number):
+        alpha = "abcdefghijklmnopqrstuvwxyz"
+        # Split them up
+        split = re.findall(r"[^\W\d_]+|\d+", build_number)
+        start = split[0].rjust(4, "0")
+        alph  = split[1]
+        end   = split[2].rjust(6, "0")
+        alpha_num = str(alpha.index(alph.lower())).rjust(2, "0")
+        return int(start + alpha_num + end)
+
+    def build_search(self):
+        self.head("Web Drivers Search")
+        print(" ")
+        if not "updates" in self.web_drivers:
+            # No manifest
+            print("The manifest was unreachable!\n\nPlease check your internet connection and update the manifest.")
+            time.sleep(5)
+            return
+        print("OS Version:       {}".format(self.os_number))
+        print("OS Build Number:  {}".format(self.os_build_number))
+        print(" ")
+        print("M. Main Menu")
+        print("Q. Quit")
+        print(" ")
+        menu = self.grab("Please type the build number of or OS version\nof your target web driver:  ")
+
+        if not len(menu):
+            self.build_search()
+            return
+
+        if menu[:1].lower() == "m":
+            return
+        elif menu[:1].lower() == "q":
+            self.custom_quit()
+
+        # At this point, we have a build to search for
+        mwd = next((x for x in self.web_drivers.get("updates", []) if x["OS"].lower() == menu.lower()), None)
+        if mwd:
+            # Found it - download it!
+            self.download_for_build(mwd["OS"])
+            return
+        # We didn't get an exact match, let's try to determine what's up
+        # First check if it's a build number (##N####) or OS number (10.##.##)
+        p = menu.split(".")
+        p = [x for x in p if x != ""]
+        if len(p) < 2 or len(p) > 3:
+            # Nothing found - try again!
+            self.build_search()
+            return
+        # We have . separated stuffs
+        wd_list = [x for x in self.web_drivers.get("updates", []) if self.get_os(x["OS"]).startswith(menu)]
+        if len(wd_list) == 1:
+            # We got *one* match - just download it
+            self.download_for_build(wd_list[0]["OS"])
+            return
+        elif len(wd_list) == 0:
+            # No matches
+            self.head("Searching For {}".format(menu))
+            print(" ")
+            print("No matches found!")
+            print(" ")
+            self.grab("Press [enter] to return to the search menu...")
+            self.build_search()
+            return
+        else:
+            # We got multiple matches
+            m_title = menu
+            while True:
+                self.head("Multiple Matches For {}".format(m_title))
+                print(" ")
+                index = 0
+                for i in wd_list:
+                    index += 1
+                    print("{}. {} ({})".format(index, self.get_os(i["OS"]), i["OS"]))
+                print(" ")
+                print("S. Return to Search")
+                print("M. Main Menu")
+                print("Q. Quit")
+                print(" ")
+                menu = self.grab("Please select a build:  ")
+                if not len(menu):
+                    continue
+                if menu[:1].lower() == "s":
+                    self.build_search()
+                    return
+                elif menu[:1].lower() == "m":
+                    return
+                elif menu[:1].lower() == "q":
+                    self.custom_quit()
+                try:
+                    menu = int(menu) -1
+                except:
+                    continue
+                if menu < 0 or menu >= len(wd_list):
+                    continue
+                self.download_for_build(wd_list[menu]["OS"])
+                return
+                    
 
     def build_list(self):
         # Print 8 columns
@@ -381,6 +489,7 @@ class WebDriver:
 
         if not len(menu):
             self.build_list()
+            return
 
         if menu[:1].lower() == "m":
             return
@@ -613,8 +722,63 @@ class WebDriver:
         self.main()
         return
 
-    def patch_installer(self):
+    def patch_installer_build(self):
         self.head("Patch Install Package")
+        print(" ")
+        print("OS Build Number:  {}".format(self.os_build_number))
+        print(" ")
+        print("M. Main Menu")
+        print("Q. Quit")
+        print(" ")
+        menu = self.grab("Would you like to also patch the web drivers inside the package? (y/n):  ")
+
+        if not len(menu):
+            self.patch_installer_build()
+            return
+
+        if menu.lower() == "q":
+            self.custom_quit()
+        elif menu.lower() == "m":
+            return
+        elif menu.lower() == "n":
+            self.patch_installer()
+            return
+        
+        if not menu.lower() == "y":
+            self.patch_installer_build()
+            return
+        
+        while True:
+            # Get a build number
+            self.head("Patch Install Package")
+            print(" ")
+            print("OS Build Number:  {}".format(self.os_build_number))
+            print(" ")
+            print("C. Set To Current Build Number")
+            print("M. Main Menu")
+            print("Q. Quit")
+            print(" ")
+            menu = self.grab("Please enter the target build number:  ")
+            if not len(menu):
+                continue
+            if menu == "m":
+                return
+            elif menu == "q":
+                self.custom_quit()
+            elif menu == "c":
+                self.patch_installer(self.os_build_number)
+                return
+            else:
+                self.patch_installer(menu)
+                return
+
+    def patch_installer(self, build = None):
+        if build:
+            self.head("Patch Install Package ({})".format(build))
+        else:
+            self.head("Patch Install Package")
+        print(" ")
+        print("OS Build Number:  {}".format(self.os_build_number))
         print(" ")
         print("M. Main Menu")
         print("Q. Quit")
@@ -622,7 +786,7 @@ class WebDriver:
         menu = self.grab("Please drag and drop the install package to patch:  ")
 
         if not len(menu):
-            self.patch_installer()
+            self.patch_installer(build)
             return
 
         if menu.lower() == "q":
@@ -635,12 +799,12 @@ class WebDriver:
         if not menu_path:
             print("That path doesn't exist...")
             time.sleep(3)
-            self.patch_installer()
+            self.patch_installer(build)
             return
         # Path exists
         temp_dir = tempfile.mkdtemp()
         try:
-            self.patch_pkg(menu_path, temp_dir)
+            self.patch_pkg(menu_path, temp_dir, build)
         except:
             print("Something went wrong!")
             time.sleep(3)
@@ -648,7 +812,7 @@ class WebDriver:
             shutil.rmtree(temp_dir)
         return
 
-    def patch_pkg(self, package, temp):
+    def patch_pkg(self, package, temp, build = None):
         self.head("Patching Install Package")
         print(" ")
         script_path = os.path.dirname(os.path.realpath(__file__))
@@ -671,11 +835,55 @@ class WebDriver:
                 new_dist += line
         with open(temp + "/package/Distribution", "w") as f:
             f.write(new_dist)
+
+        if build:
+            # We have a build - let's do stuff
+            print("Patching Kext for {}...".format(build))
+            os.chdir(temp + "/package")
+            os.chdir(self.run({"args" : "ls | grep -i nvwebdrivers", "shell" : True})[0].strip())
+            self.run({"args" : ["mkdir", "temp"]})
+            os.chdir("temp")
+            print("    Extracting Payload...")
+            self.run({"args" : ["tar", "xvf", "../Payload"]})
+            info_path = None
+            if os.path.exists("./NVDAStartupWeb.kext/Contents/Info.plist"):
+                info_path = "./NVDAStartupWeb.kext/Contents/Info.plist"
+            elif os.path.exists("./Library/Extensions/NVDAStartupWeb.kext/Contents/Info.plist"):
+                info_path = "./Library/Extensions/NVDAStartupWeb.kext/Contents/Info.plist"
+            elif os.path.exists("./NVDAStartup.kext/Contents/Info.plist"):
+                # Old stuff...
+                info_path = "./NVDAStartup.kext/Contents/Info.plist"
+            if not info_path:
+                print("Couldn't find Info.plist to patch!")
+                os.chdir(script_path)
+                return
+            print("    Patching Info.plist for {}...".format(build))
+            # Got the info.plist - load it and patch it
+            info_plist = plistlib.readPlist(os.path.realpath(info_path))
+            info_plist["IOKitPersonalities"]["NVDAStartup"]["NVDARequiredOS"] = build
+            # Write the changes
+            plistlib.writePlist(info_plist, os.path.realpath(info_path))
+            # Remove the old Payload and BOM
+            print("    Removing old Payload and BOM...")
+            self.run({"args" : ["rm", "../Payload"]})
+            self.run({"args" : ["rm", "../BOM"]})
+            # Repacking Payload
+            print("    Repacking Payload...")
+            self.run({"args" : "find . | cpio -o --format odc | gzip -c > ../Payload", "shell" : True})
+            # Generate BOM
+            print("    Generating BOM...")
+            self.run({"args" : ["mkbom", "../../", "../BOM"]})
+            # Clean up the temp folder
+            print("    Cleaning up...\n")
+            os.chdir("../")
+            self.run({"args" : ["rm", "-rf","temp"]})
+
         self.check_dir("Patched")
         print("Repacking...\n")
         os.chdir(os.path.dirname(os.path.realpath(__file__)))
         os.chdir("../Web Drivers/Patched/")
-        self.run({"args" : ["pkgutil", "--flatten", temp + "/package", os.getcwd() + "/" + os.path.basename(package)[:-4] + " (Patched).pkg"]})
+        suffix = " (Patched).pkg" if build == None else " ({}).pkg".format(build)
+        self.run({"args" : ["pkgutil", "--flatten", temp + "/package", os.getcwd() + "/" + os.path.basename(package)[:-4] + suffix]})
         print("Done.")
         self.run({"args":["open", os.getcwd()]})
         time.sleep(5)
@@ -855,6 +1063,7 @@ class WebDriver:
         print("I. Patch Install Package")
         print("D. Download For Current")
         print("B. Download By Build Number")
+        print("S. Search By Build/OS Number")
         print("R. Remove Web Drivers")
         print("U. Update Manifest")
         print("C. Config.plist Patch Menu")
@@ -875,8 +1084,10 @@ class WebDriver:
             self.download_for_build(self.os_build_number)
         elif menu[:1].lower() == "b":
             self.build_list()
+        elif menu[:1].lower() == "s":
+            self.build_search()
         elif menu[:1].lower() == "i":
-            self.patch_installer()
+            self.patch_installer_build()
         elif menu[:1].lower() == "u":
             self.get_manifest()
         elif menu[:1].lower() == "r":
