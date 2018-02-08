@@ -868,15 +868,17 @@ class WebDriver:
             self.run({"args" : ["rm", "../Payload"]})
             self.run({"args" : ["rm", "../BOM"]})
             # Repacking Payload
+            print("    Setting ownership...")
+            self.run({"args" : "sudo chown -R 0:0 ./*", "shell" : True})
             print("    Repacking Payload...")
-            self.run({"args" : "find . | cpio -o --format odc | gzip -c > ../Payload", "shell" : True})
+            self.run({"args" : "sudo find . | sudo cpio -o --format odc | gzip -c > ../Payload", "shell" : True})
             # Generate BOM
             print("    Generating BOM...")
-            self.run({"args" : ["mkbom", "../../", "../BOM"]})
+            self.run({"args" : ["mkbom", "../../", "../BOM"], "sudo" : True})
             # Clean up the temp folder
             print("    Cleaning up...\n")
             os.chdir("../")
-            self.run({"args" : ["rm", "-rf","temp"]})
+            self.run({"args" : ["rm", "-rf","temp"], "sudo" : True})
 
         self.check_dir("Patched")
         print("Repacking...\n")
