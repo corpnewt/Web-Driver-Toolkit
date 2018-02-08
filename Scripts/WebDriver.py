@@ -808,6 +808,7 @@ class WebDriver:
         except:
             print("Something went wrong!")
             time.sleep(3)
+        os.chdir(os.path.dirname(os.path.realpath(__file__)))
         if os.path.exists(temp_dir):
             shutil.rmtree(temp_dir)
         return
@@ -855,7 +856,6 @@ class WebDriver:
                 info_path = "./NVDAStartup.kext/Contents/Info.plist"
             if not info_path:
                 print("Couldn't find Info.plist to patch!")
-                os.chdir(script_path)
                 return
             print("    Patching Info.plist for {}...".format(build))
             # Got the info.plist - load it and patch it
@@ -869,16 +869,32 @@ class WebDriver:
             self.run({"args" : ["rm", "../BOM"]})
             # Repacking Payload
             print("    Setting ownership...")
-            self.run({"args" : "sudo chown -R 0:0 ./*", "shell" : True})
+            stat = self.run({"args" : "sudo chown -R 0:0 ./*", "shell" : True})
+            if not stat[2] == 0:
+                print("Something went wrong!\n")
+                print(stat[1])
+                return
             print("    Repacking Payload...")
-            self.run({"args" : "sudo find . | sudo cpio -o --format odc | gzip -c > ../Payload", "shell" : True})
+            stat = self.run({"args" : "sudo find . | sudo cpio -o --format odc | gzip -c > ../Payload", "shell" : True})
+            if not stat[2] == 0:
+                print("Something went wrong!\n")
+                print(stat[1])
+                return
             # Generate BOM
             print("    Generating BOM...")
-            self.run({"args" : ["mkbom", "../../", "../BOM"], "sudo" : True})
+            stat = self.run({"args" : ["mkbom", "../../", "../BOM"], "sudo" : True})
+            if not stat[2] == 0:
+                print("Something went wrong!\n")
+                print(stat[1])
+                return
             # Clean up the temp folder
             print("    Cleaning up...\n")
             os.chdir("../")
-            self.run({"args" : ["rm", "-rf","temp"], "sudo" : True})
+            stat = self.run({"args" : ["rm", "-rf","temp"], "sudo" : True})
+            if not stat[2] == 0:
+                print("Something went wrong!\n")
+                print(stat[1])
+                return
 
         self.check_dir("Patched")
         print("Repacking...\n")
