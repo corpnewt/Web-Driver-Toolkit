@@ -9,6 +9,11 @@ import subprocess
 import re
 import base64
 import binascii
+import threading
+try:
+    from Queue import Queue, Empty
+except:
+    from queue import Queue, Empty
 # Python-aware urllib stuff
 if sys.version_info >= (3, 0):
     from urllib.request import urlopen
@@ -50,24 +55,62 @@ class WebDriver:
         else:
             self.wd_loc = None
 
+    def _read_output(self, pipe, q):
+        while True:
+            try:
+                c = pipe.read(1)
+                q.put(c)
+            except ValueError:
+                break
+
     def _stream_output(self, comm, shell = False):
-        output = ""
+        output = error = ""
+        p = ot = et = None
         try:
             if shell and type(comm) is list:
                 comm = " ".join(comm)
             if not shell and type(comm) is str:
                 comm = comm.split()
-            p = subprocess.Popen(comm, shell=shell, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+            p = subprocess.Popen(comm, shell=shell, stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=1, universal_newlines=True)
+            # Threading!
+            oq, eq = Queue(), Queue()
+            ot = threading.Thread(target=self._read_output, args=(p.stdout, oq))
+            et = threading.Thread(target=self._read_output, args=(p.stderr, eq))
+            ot.daemon, et.daemon = True, True
+            ot.start()
+            et.start()
+
             while True:
-                stdoutdata = p.stdout.readline()
-                if stdoutdata:
-                    output += stdoutdata.decode("utf-8")
-                    sys.stdout.write(stdoutdata.decode("utf-8"))
-                else:
+                c = z = None
+                try:
+                    c = oq.get_nowait()
+                    output += c
+                    sys.stdout.write(c)
+                except Empty:
+                    pass
+                try:
+                    z = eq.get_nowait()
+                    error += z
+                    sys.stdout.write(z)
+                except Empty:
+                    pass
+                sys.stdout.flush()
+                p.poll()
+                if not c and not z and p.returncode is not None:
                     break
-            return output
+            o, e = p.communicate()
+            ot.exit()
+            et.exit()
+            return (output+o, error+e, p.returncode)
         except:
-            return output
+            if ot or et:
+                try: ot.exit()
+                except: pass
+                try: et.exit()
+                except: pass
+            if p:
+                return (output, error, p.returncode)
+            return ("", "Command not found!", 1)
 
     def _run_command(self, comm, shell = False):
         c = None
@@ -433,7 +476,7 @@ class WebDriver:
                 index = 0
                 for i in wd_list:
                     index += 1
-                    print("{}. {} ({})".format(index, self.get_os(i["OS"]), i["OS"]))
+                    print("{}. {} ({}) - {}".format(index, self.get_os(i["OS"]), i["OS"], i["version"]))
                 print(" ")
                 print("S. Return to Search")
                 print("M. Main Menu")
@@ -1042,6 +1085,16 @@ class WebDriver:
         text_list = re.findall('........?', text)
         return " ".join(text_list)
 
+    def flush_cache(self):
+        self.head("Rebuilding Kext Cache")
+        print(" ")
+        # Rebuild kextcache
+        print("Rebuilding kext cache...\n")
+        self._stream_output(["sudo", "kextcache", "-i", "/"])
+        print(" ")
+        print("Done.")
+        time.sleep(5)
+
     def main(self):
         self._check_info()
         self.get_system_info()
@@ -1070,6 +1123,15 @@ class WebDriver:
             print("Newest:           " + newest_version + " (Current)")
         else:
             print("Newest:           " + newest_version)
+
+        try:
+            nv = self.run({"args": "nvram -p | grep -i nvda_drv | cut -d$'\t' -f 2", "shell" : True})[0].strip("\n")
+        except:
+            nv = ""
+        if nv == "1" or nv == "1%00":
+            print("Status:           Enabled")
+        else:
+            print("Status:           Disabled - or Unknown")
         
         print(" ")
         patch = False
@@ -1083,6 +1145,7 @@ class WebDriver:
         print("R. Remove Web Drivers")
         print("U. Update Manifest")
         print("C. Config.plist Patch Menu")
+        print("F. Flush Kext Cache")
         print("")
         print("Q. Quit")
         print(" ")
@@ -1110,6 +1173,8 @@ class WebDriver:
             self.remove_drivers()
         elif menu[:1].lower() == "c":
             self.config_menu()
+        elif menu[:1].lower() == "f":
+            self.flush_cache()
         
         return
 
