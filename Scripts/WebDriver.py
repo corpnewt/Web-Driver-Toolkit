@@ -278,7 +278,7 @@ class WebDriver:
             return str(raw_input(prompt))
 
     # Header drawing method
-    def head(self, text = "Web Driver Updater", width = 50):
+    def head(self, text = "Web Driver Toolkit", width = 50):
         os.system("clear")
         print("  {}".format("#"*width))
         mid_len = int(round(width/2-len(text)/2)-2)
@@ -287,7 +287,7 @@ class WebDriver:
         print("#"*width)
 
     def custom_quit(self):
-        self.head("Web Driver Updater")
+        self.head("Web Driver Toolkit")
         print("by CorpNewt\n")
         print("Thanks for testing it out, for bugs/comments/complaints")
         print("send me a message on Reddit, or check out my GitHub:\n")
@@ -1098,7 +1098,7 @@ class WebDriver:
     def main(self):
         self._check_info()
         self.get_system_info()
-        self.head("Web Driver Updater")
+        self.head("Web Driver Toolkit")
         print(" ")
         os.chdir(os.path.dirname(os.path.realpath(__file__)))
 
