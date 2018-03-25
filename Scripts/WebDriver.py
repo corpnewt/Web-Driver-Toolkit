@@ -616,24 +616,29 @@ class WebDriver:
                 "message" : "Removing " + self.wd_loc + "/Contents/Info.plist...\n" 
             },
             { 
-                "args" : ["sudo", "mv", "-f", self.wd_loc + "/Contents/Info.plist.bak", self.wd_loc + "/Contents/Info.plist"], 
+                "args" : ["mv", "-f", self.wd_loc + "/Contents/Info.plist.bak", self.wd_loc + "/Contents/Info.plist"], 
                 "sudo" : True,
                 "message" : "Renaming Info.plist.bak to Info.plist...\n"
             },
             { 
-                "args" : ["sudo", "chown", "0:0", self.wd_loc + "/Contents/Info.plist"], 
+                "args" : ["chown", "0:0", self.wd_loc + "/Contents/Info.plist"], 
                 "sudo" : True, 
                 "message" : "Updating ownership and permissions...\n" 
             },
             { 
-                "args" : ["sudo", "chmod", "755", self.wd_loc + "/Contents/Info.plist"], 
+                "args" : ["chmod", "755", self.wd_loc + "/Contents/Info.plist"], 
                 "sudo" : True
             },
             { 
-                "args" : ["sudo", "kextcache", "-i", "/"], 
+                "args" : ["kextcache", "-i", "/"], 
                 "sudo" : True,
                 "stream" : True,
                 "message" : "Rebuilding kext cache...\n" 
+            },
+            { 
+                "args" : ["kextcache", "-u", "/"], 
+                "sudo" : True,
+                "stream" : True,
             }
         ]
         self.run(c, True)
@@ -709,6 +714,11 @@ class WebDriver:
                 "sudo" : True,
                 "stream" : True,
                 "message" : "Rebuilding kext cache...\n"
+            },
+            { 
+                "args" : ["kextcache", "-u", "/"], 
+                "sudo" : True,
+                "stream" : True,
             }
         ]
         self.run(c, True)
@@ -956,7 +966,7 @@ class WebDriver:
         self.run({"args":["sudo", "rm", "-rf", "/Library/Extensions/GeForce*Web.kext", "/Library/Extensions/NVDA*Web.kext"], "shell" : True})
         # Rebuild kextcache
         print("Rebuilding kext cache...\n")
-        self._stream_output(["sudo", "kextcache", "-i", "/"])
+        self.flush_cache()
         print(" ")
         print("Done.")
         time.sleep(5)
@@ -1085,15 +1095,18 @@ class WebDriver:
         text_list = re.findall('........?', text)
         return " ".join(text_list)
 
-    def flush_cache(self):
-        self.head("Rebuilding Kext Cache")
-        print(" ")
-        # Rebuild kextcache
-        print("Rebuilding kext cache...\n")
+    def flush_cache(self, p=False):
+        if p:
+            self.head("Rebuilding Kext Cache")
+            print(" ")
+            # Rebuild kextcache
+            print("Rebuilding kext cache...\n")
         self._stream_output(["sudo", "kextcache", "-i", "/"])
-        print(" ")
-        print("Done.")
-        time.sleep(5)
+        self._stream_output(["sudo", "kextcache", "-u", "/"])
+        if p:
+            print(" ")
+            print("Done.")
+            time.sleep(5)
 
     def main(self):
         self._check_info()
@@ -1174,7 +1187,7 @@ class WebDriver:
         elif menu[:1].lower() == "c":
             self.config_menu()
         elif menu[:1].lower() == "f":
-            self.flush_cache()
+            self.flush_cache(True)
         
         return
 
