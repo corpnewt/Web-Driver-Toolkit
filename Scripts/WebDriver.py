@@ -353,7 +353,10 @@ class WebDriver:
             return
         print("Downloading " + dl_update["version"])
         print(" ")
-        self.check_dir(build)
+        # Get the OS version + build number 10.xx.x (xxAxxxx)
+        folder_name = "{} ({})".format(self.get_os(build), build)
+        # self.check_dir(build)
+        self.check_dir(folder_name)
         dl_file = self.dl.stream_to_file(dl_update["downloadURL"], dl_update["downloadURL"].split("/")[-1])
         if dl_file:
             print(dl_file + " downloaded successfully!")
