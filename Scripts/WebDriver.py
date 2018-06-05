@@ -813,11 +813,11 @@ class WebDriver:
             menu = self.grab("Please enter the target build number:  ")
             if not len(menu):
                 continue
-            if menu == "m":
+            if menu.lower() == "m":
                 return
-            elif menu == "q":
+            elif menu.lower() == "q":
                 self.custom_quit()
-            elif menu == "c":
+            elif menu.lower() == "c":
                 self.patch_installer(self.os_build_number)
                 return
             else:
