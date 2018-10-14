@@ -43,6 +43,9 @@ class WebDriver:
         self.wd_loc = None
         self.sip_checked = False
         self.installed_version = "Not Installed!"
+        self.bdmesg = os.path.join(os.path.dirname(os.path.realpath(__file__)), "bdmesg")
+        if not os.path.exists(self.bdmesg):
+            self.bdmesg = None
 
         self.get_manifest()
         self.get_system_info()
@@ -1141,13 +1144,18 @@ class WebDriver:
             print("Newest:           " + newest_version)
 
         try:
-            nv = self.run({"args": "nvram -p | grep -i nvda_drv | cut -d$'\t' -f 2", "shell" : True})[0].strip("\n")
+            nv = self.run({"args":"nvram -p | grep -i nvda_drv | cut -d$'\t' -f 2", "shell" : True})[0].strip("\n")
         except:
             nv = ""
+        aptio_loaded = "Unknown"
+        if self.bdmesg:
+            aptio = self.run({"args":"{} | grep -i aptiomemoryfix".format(self.bdmesg),"shell":True})[0].strip("\n")
+            aptio_loaded = "Loaded" if "success" in aptio.lower() else "Not Loaded"
+
         if nv in ["1","1%00"]:
-            print("Status:           Enabled")
+            print("Status:           Enabled (AptioMemoryFix {})".format(aptio_loaded))
         else:
-            print("Status:           Disabled - or Unknown")
+            print("Status:           Disabled - or Unknown (AptioMemoryFix {})".format(aptio_loaded))
         
         print(" ")
         patch = False
