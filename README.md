@@ -10,3 +10,7 @@ To install, do the following one line at a time in Terminal:
     chmod +x Run.command
     
 Then run with either `./Run.command` or by double-clicking *Run.command*
+
+## Thanks To:
+
+* Slice, apianti, vit9696, Download Fritz, Zenith432, STLVNUB, JrCs,cecekpawon, Needy, cvad, Rehabman, philip_petev, ErmaC and the rest of the Clover crew for Clover and bdmesg
