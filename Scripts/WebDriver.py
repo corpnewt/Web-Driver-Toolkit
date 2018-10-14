@@ -1144,7 +1144,7 @@ class WebDriver:
             nv = self.run({"args": "nvram -p | grep -i nvda_drv | cut -d$'\t' -f 2", "shell" : True})[0].strip("\n")
         except:
             nv = ""
-        if nv == "1" or nv == "1%00":
+        if nv in ["1","1%00"]:
             print("Status:           Enabled")
         else:
             print("Status:           Disabled - or Unknown")
@@ -1162,6 +1162,7 @@ class WebDriver:
         print("U. Update Manifest")
         print("C. Config.plist Patch Menu")
         print("F. Flush Kext Cache")
+        print("N. Attempt to {} nvram_drv=1 in NVRAM".format("unset" if nv in ["1","1%00"] else "set"))
         print("")
         print("Q. Quit")
         print(" ")
@@ -1191,6 +1192,22 @@ class WebDriver:
             self.config_menu()
         elif menu[:1].lower() == "f":
             self.flush_cache(True)
+        elif menu[:1].lower() == "n":
+            if nv in ["1","1%00"]:
+                # Unset
+                self.head("Unsetting nvda_drv=1")
+                print("")
+                print("Running:\n\nsudo nvram -d nvda_drv")
+                self._stream_output(["sudo", "nvram", "-d", "nvda_drv"])
+            else:
+                # Set
+                self.head("Setting nvda_drv=1")
+                print("")
+                print("Running:\n\nsudo nvram nvda_drv=1")
+                self._stream_output(["sudo", "nvram", "nvda_drv=1"])
+            print("")
+            print("Done.")
+            time.sleep(5)
         
         return
 
