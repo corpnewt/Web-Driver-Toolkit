@@ -10,6 +10,7 @@ import re
 import base64
 import binascii
 import threading
+import bdmesg
 try:
     from Queue import Queue, Empty
 except:
@@ -43,10 +44,6 @@ class WebDriver:
         self.wd_loc = None
         self.sip_checked = False
         self.installed_version = "Not Installed!"
-        self.bdmesg = os.path.join(os.path.dirname(os.path.realpath(__file__)), "bdmesg")
-        if not os.path.exists(self.bdmesg):
-            self.bdmesg = None
-
         self.get_manifest()
         self.get_system_info()
 
@@ -1148,8 +1145,8 @@ class WebDriver:
         except:
             nv = ""
         aptio_loaded = "Unknown"
-        if self.bdmesg:
-            aptio = self.run({"args":"{} | grep -i aptiomemoryfix".format(self.bdmesg),"shell":True})[0].strip("\n")
+        aptio = next((x for x in bdmesg.bdmesg().split("\n") if "aptiomemoryfix" in x.lower()), None)
+        if aptio:
             aptio_loaded = "Loaded" if "success" in aptio.lower() else "Not Loaded"
 
         if nv in ["1","1%00"]:
