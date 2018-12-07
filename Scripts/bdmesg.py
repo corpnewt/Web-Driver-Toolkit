@@ -31,7 +31,7 @@ def _bdmesg(comm):
     p = subprocess.Popen(comm, shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     bd, be = p.communicate()
     if sys.version_info >= (3,0) and isinstance(bd, bytes):
-        bd = bd.decode("utf-8")
+        bd = bd.decode("utf-8","ignore")
     for line in bd.split("\n"):
         # We're just looking for the "boot-log" property, then we need to format it
         if not '"boot-log"' in line:
