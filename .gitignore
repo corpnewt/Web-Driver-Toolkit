@@ -3,6 +3,9 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# Ignore output folder
+Web Drivers
+
 # C extensions
 *.so
 
