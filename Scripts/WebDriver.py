@@ -1,25 +1,4 @@
-import plist
-import sys
-import os
-import time
-import downloader
-import tempfile
-import shutil
-import subprocess
-import re
-import base64
-import binascii
-import threading
-import bdmesg
-try:
-    from Queue import Queue, Empty
-except:
-    from queue import Queue, Empty
-# Python-aware urllib stuff
-if sys.version_info >= (3, 0):
-    from urllib.request import urlopen
-else:
-    from urllib2 import urlopen
+import sys, os, tempfile, shutil, re, base64, binascii, time, bdmesg, downloader, plist, run, utils
 
 class WebDriver:
 
@@ -27,7 +6,7 @@ class WebDriver:
 
         # Check the OS first
         if not str(sys.platform) == "darwin":
-            self.head("Incompatible System")
+            self.u.head("Incompatible System")
             print(" ")
             print("This script can only be run from macOS/OS X.")
             print(" ")
@@ -38,6 +17,8 @@ class WebDriver:
             exit(1)
 
         self.dl = downloader.Downloader()
+        self.r  = run.Run()
+        self.u  = utils.Utils()
         self.web_drivers = None
         self.os_build_number = None
         self.os_number = None
@@ -55,133 +36,9 @@ class WebDriver:
         else:
             self.wd_loc = None
 
-    def _read_output(self, pipe, q):
-        while True:
-            try:
-                c = pipe.read(1)
-                q.put(c)
-            except ValueError:
-                break
-
-    def _stream_output(self, comm, shell = False):
-        output = error = ""
-        p = ot = et = None
-        try:
-            if shell and type(comm) is list:
-                comm = " ".join(comm)
-            if not shell and type(comm) is str:
-                comm = comm.split()
-            p = subprocess.Popen(comm, shell=shell, stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=1, universal_newlines=True)
-            # Threading!
-            oq, eq = Queue(), Queue()
-            ot = threading.Thread(target=self._read_output, args=(p.stdout, oq))
-            et = threading.Thread(target=self._read_output, args=(p.stderr, eq))
-            ot.daemon, et.daemon = True, True
-            ot.start()
-            et.start()
-
-            while True:
-                c = z = None
-                try:
-                    c = oq.get_nowait()
-                    output += c
-                    sys.stdout.write(c)
-                except Empty:
-                    pass
-                try:
-                    z = eq.get_nowait()
-                    error += z
-                    sys.stdout.write(z)
-                except Empty:
-                    pass
-                sys.stdout.flush()
-                p.poll()
-                if not c and not z and p.returncode is not None:
-                    break
-            o, e = p.communicate()
-            ot.exit()
-            et.exit()
-            return (output+o, error+e, p.returncode)
-        except:
-            if ot or et:
-                try: ot.exit()
-                except: pass
-                try: et.exit()
-                except: pass
-            if p:
-                return (output, error, p.returncode)
-            return ("", "Command not found!", 1)
-
-    def _run_command(self, comm, shell = False):
-        c = None
-        try:
-            if shell and type(comm) is list:
-                comm = " ".join(comm)
-            if not shell and type(comm) is str:
-                comm = comm.split()
-            p = subprocess.Popen(comm, shell=shell, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            c = p.communicate()
-            return (c[0].decode("utf-8"), c[1].decode("utf-8"), p.returncode)
-        except:
-            if c == None:
-                return ("", "Command not found!", 1)
-            return (c[0].decode("utf-8"), c[1].decode("utf-8"), p.returncode)
-
-    def run(self, command_list, leave_on_fail = False):
-        # Command list should be an array of dicts
-        if type(command_list) is dict:
-            # We only have one command
-            command_list = [command_list]
-        output_list = []
-        for comm in command_list:
-            args   = comm.get("args",   [])
-            shell  = comm.get("shell",  False)
-            stream = comm.get("stream", False)
-            sudo   = comm.get("sudo",   False)
-            stdout = comm.get("stdout", False)
-            stderr = comm.get("stderr", False)
-            mess   = comm.get("message", None)
-            
-            if not mess == None:
-                print(mess)
-
-            if not len(args):
-                # nothing to process
-                continue
-            if sudo:
-                # Check if we have sudo
-                out = self._run_command(["which", "sudo"])
-                if "sudo" in out[0]:
-                    # Can sudo
-                    args.insert(0, "sudo")
-            
-            if stream:
-                # Stream it!
-                out = self._stream_output(args, shell)
-            else:
-                # Just run and gather output
-                out = self._run_command(args, shell)
-                if stdout and len(out[0]):
-                    print(out[0])
-                if stderr and len(out[1]):
-                    print(out[1])
-            # Append output
-            if type(out) is str:
-                # We streamed - assume success?
-                out = ( out, "", 0 )
-            output_list.append(out)
-            # Check for errors
-            if leave_on_fail and out[2] != 0:
-                # Got an error - leave
-                break
-        if len(output_list) == 1:
-            # We only ran one command - just return that output
-            return output_list[0]
-        return output_list
-
     def check_sip(self):
         # Checks our sip status and warns if needed
-        sip_stats = self.run({"args" : ["csrutil", "status"]})[0]
+        sip_stats = self.r.run({"args" : ["csrutil", "status"]})[0]
         msg = "Unknown SIP Configuration!\n"
         title = "Unknown"
         if not sip_stats.startswith("System Integrity Protection status:"):
@@ -202,7 +59,7 @@ class WebDriver:
             # SIP is enabled completely
             title = "Enabled"
             msg = "System Integrity Protection is completely enabled!\n"
-        self.head("SIP Is " + title)
+        self.u.head("SIP Is " + title)
         print(" ")
         print(msg)
         print("This may prevent the web drivers from being patched or loading.")
@@ -287,7 +144,7 @@ class WebDriver:
         print("#"*width)
 
     def custom_quit(self):
-        self.head("Web Driver Toolkit")
+        self.u.head("Web Driver Toolkit")
         print("by CorpNewt\n")
         print("Thanks for testing it out, for bugs/comments/complaints")
         print("send me a message on Reddit, or check out my GitHub:\n")
@@ -297,26 +154,26 @@ class WebDriver:
         exit(0)
 
     def get_manifest(self):
-        self.head("Retrieving Manifest...")
+        self.u.head("Retrieving Manifest...")
         print(" ")
         print("Retrieving manifest from \"https://gfe.nvidia.com/mac-update\"...\n")
         try:
             plist_data = self.dl.get_bytes("https://gfe.nvidia.com/mac-update")
             if not plist_data or not len(str(plist_data)):
                 print("Looks like that site isn't responding!\n\nPlease check your intenet connection and try again.")
-                time.sleep(3)
+                self.u.grab("",timeout=3)
                 self.web_drivers = {}
                 return
             self.web_drivers = plist.loads(plist_data)
         except:
             print("Something went wrong while getting the manifest!\n\nPlease check your intenet connection and try again.")
-            time.sleep(3)
+            self.u.grab("",timeout=3)
             self.web_drivers = {}
 
     def get_system_info(self):
         self.installed_version = "Not Installed!"
-        self.os_build_number = self.run({"args" : ["sw_vers", "-buildVersion"]})[0].strip()
-        self.os_number       = self.run({"args" : ["sw_vers", "-productVersion"]})[0].strip()
+        self.os_build_number = self.r.run({"args" : ["sw_vers", "-buildVersion"]})[0].strip()
+        self.os_number       = self.r.run({"args" : ["sw_vers", "-productVersion"]})[0].strip()
         if self.wd_loc:
             info_plist = plist.readPlist(self.wd_loc + "/Contents/Info.plist")            
             self.installed_version = info_plist["CFBundleGetInfoString"].split(" ")[-1].replace("(", "").replace(")", "")
@@ -333,12 +190,12 @@ class WebDriver:
         return os.getcwd()
 
     def download_for_build(self, build):
-        self.head("Downloading for " + build)
+        self.u.head("Downloading for " + build)
         print(" ")
         dl_update = None
         if not "updates" in self.web_drivers:
             print("The manifest was unreachable!\n\nPlease check your internet connection and update the manifest.")
-            time.sleep(5)
+            self.u.grab("",timeout=5)
             return
         for update in self.web_drivers.get("updates", []):
             if update["OS"].lower() == build.lower():
@@ -346,7 +203,7 @@ class WebDriver:
                 break 
         if not dl_update:
             print("There isn't a version available for that build number!")
-            time.sleep(5)
+            self.u.grab("",timeout=5)
             return
         print("Downloading " + dl_update["version"])
         print(" ")
@@ -357,8 +214,8 @@ class WebDriver:
         dl_file = self.dl.stream_to_file(dl_update["downloadURL"], dl_update["downloadURL"].split("/")[-1])
         if dl_file:
             print(dl_file + " downloaded successfully!")
-            self.run({"args":["open", os.getcwd()]})
-            time.sleep(5)
+            self.r.run({"args":["open", os.getcwd()]})
+            self.u.grab("",timeout=5)
 
     def format_table(self, items, columns):
         max_length = 0
@@ -418,12 +275,12 @@ class WebDriver:
         return int(start + alpha_num + end)
 
     def build_search(self):
-        self.head("Web Drivers Search")
+        self.u.head("Web Drivers Search")
         print(" ")
         if not "updates" in self.web_drivers:
             # No manifest
             print("The manifest was unreachable!\n\nPlease check your internet connection and update the manifest.")
-            time.sleep(5)
+            self.u.grab("",timeout=5)
             return
         print("OS Version:       {}".format(self.os_number))
         print("OS Build Number:  {}".format(self.os_build_number))
@@ -460,7 +317,7 @@ class WebDriver:
         wd_list = [x for x in self.web_drivers.get("updates", []) if self.get_os(x["OS"]).startswith(menu)]
         if len(wd_list) == 0:
             # No matches
-            self.head("Searching For {}".format(menu))
+            self.u.head("Searching For {}".format(menu))
             print(" ")
             print("No matches found!")
             print(" ")
@@ -471,7 +328,7 @@ class WebDriver:
             # We got at least one match
             m_title = menu
             while True:
-                self.head("Matches For {}".format(m_title))
+                self.u.head("Matches For {}".format(m_title))
                 print(" ")
                 index = 0
                 for i in wd_list:
@@ -504,13 +361,13 @@ class WebDriver:
 
     def build_list(self):
         # Print 8 columns
-        self.head("Web Drivers By Build Number")
+        self.u.head("Web Drivers By Build Number")
         print(" ")
         build_list = []
         if not "updates" in self.web_drivers:
             # No manifest
             print("The manifest was unreachable!\n\nPlease check your internet connection and update the manifest.")
-            time.sleep(5)
+            self.u.grab("",timeout=5)
             return
         for update in self.web_drivers.get("updates", []):
             build_list.append(update["OS"])
@@ -542,14 +399,14 @@ class WebDriver:
         self.build_list()
 
     def patch_menu(self):
-        self.head("Web Driver Patch")
+        self.u.head("Web Driver Patch")
         print(" ")
         os.chdir(os.path.dirname(os.path.realpath(__file__)))
 
         if not self.wd_loc:
             print("NVDAStartupWeb.kext was not found in either /L/E or /S/L/E!\n")
             print("Please make sure you have the Web Drivers installed.")
-            time.sleep(5)
+            self.u.grab("",timeout=5)
             return
         info_plist = plist.readPlist(self.wd_loc + "/Contents/Info.plist")
         current_build = info_plist.get("IOKitPersonalities", {}).get("NVDAStartup", {}).get("NVDARequiredOS", None)
@@ -601,12 +458,12 @@ class WebDriver:
             else:
                 return
 
-        self.head("Restoring Backup Info.plist")
+        self.u.head("Restoring Backup Info.plist")
         print(" ")
         if not os.path.exists(self.wd_loc + "/Contents/Info.plist.bak"):
             # Create a backup
             print("Backup doesn't exist...")
-            time.sleep(5)
+            self.u.grab("",timeout=5)
             return
         # Doing things
         c = [
@@ -641,25 +498,25 @@ class WebDriver:
                 "stream" : True,
             }
         ]
-        self.run(c, True)
+        self.r.run(c, True)
         print(" ")
         print("Done.")
-        time.sleep(5)
+        self.u.grab("",timeout=5)
         return
 
     def delete_backup(self):
-        self.head("Deleting Backup Info.plist")
+        self.u.head("Deleting Backup Info.plist")
         print(" ")
         if not os.path.exists(self.wd_loc + "/Contents/Info.plist.bak"):
             # Create a backup
             print("Backup doesn't exist...")
-            time.sleep(5)
+            self.u.grab("",timeout=5)
             return
         # Removing
         print("Removing " + self.wd_loc + "/Contents/Info.plist.bak...\n")
-        self.run({"args":["rm", self.wd_loc + "/Contents/Info.plist.bak"],"sudo":True})
+        self.r.run({"args":["rm", self.wd_loc + "/Contents/Info.plist.bak"],"sudo":True})
         print("Done.")
-        time.sleep(5)
+        self.u.grab("",timeout=5)
         return
 
     def set_build(self, build_number):
@@ -671,7 +528,7 @@ class WebDriver:
             else:
                 return
 
-        self.head("Setting NVDARequiredOS to {}".format(build_number))
+        self.u.head("Setting NVDARequiredOS to {}".format(build_number))
         print(" ")
         os.chdir(os.path.dirname(os.path.realpath(__file__)))
 
@@ -681,7 +538,7 @@ class WebDriver:
         info_plist = plist.readPlist(self.wd_loc + "/Contents/Info.plist")
         if not os.path.exists(self.wd_loc + "/Contents/Info.plist.bak"):
             # Create a backup
-            self.run({
+            self.r.run({
                 "args" : ["cp", self.wd_loc + "/Contents/Info.plist", self.wd_loc + "/Contents/Info.plist.bak"],
                 "sudo" : True,
                 "message" : "Creating backup...\n"
@@ -721,24 +578,24 @@ class WebDriver:
                 "stream" : True,
             }
         ]
-        self.run(c, True)
+        self.r.run(c, True)
         # Remove temp
         if os.path.exists(temp_folder):
             shutil.rmtree(temp_folder)
         print(" ")
         print("Done.")
-        time.sleep(5)
+        self.u.grab("",timeout=5)
         return
 
     def custom_build(self):
-        self.head("Custom Build")
+        self.u.head("Custom Build")
         print(" ")
         print("")
 
         if not self.wd_loc:
             print("NVDAStartupWeb.kext was not found in either /L/E or /S/L/E!\n")
             print("Please make sure you have the Web Drivers installed.")
-            time.sleep(5)
+            self.u.grab("",timeout=5)
             return
         info_plist = plist.readPlist(self.wd_loc + "/Contents/Info.plist")
         current_build = info_plist.get("IOKitPersonalities", {}).get("NVDAStartup", {}).get("NVDARequiredOS", None)
@@ -772,7 +629,7 @@ class WebDriver:
         return
 
     def patch_installer_build(self):
-        self.head("Patch Install Package")
+        self.u.head("Patch Install Package")
         print(" ")
         print("OS Build Number:  {}".format(self.os_build_number))
         print(" ")
@@ -799,7 +656,7 @@ class WebDriver:
         
         while True:
             # Get a build number
-            self.head("Patch Install Package")
+            self.u.head("Patch Install Package")
             print(" ")
             print("OS Build Number:  {}".format(self.os_build_number))
             print(" ")
@@ -823,9 +680,9 @@ class WebDriver:
 
     def patch_installer(self, build = None):
         if build:
-            self.head("Patch Install Package ({})".format(build))
+            self.u.head("Patch Install Package ({})".format(build))
         else:
-            self.head("Patch Install Package")
+            self.u.head("Patch Install Package")
         print(" ")
         print("OS Build Number:  {}".format(self.os_build_number))
         if build:
@@ -849,7 +706,7 @@ class WebDriver:
         menu_path = self.check_path(menu)
         if not menu_path:
             print("That path doesn't exist...")
-            time.sleep(3)
+            self.u.grab("",timeout=3)
             self.patch_installer(build)
             return
         # Path exists
@@ -858,18 +715,18 @@ class WebDriver:
             self.patch_pkg(menu_path, temp_dir, build)
         except:
             print("Something went wrong!")
-            time.sleep(3)
+            self.u.grab("",timeout=3)
         os.chdir(os.path.dirname(os.path.realpath(__file__)))
         if os.path.exists(temp_dir):
             shutil.rmtree(temp_dir)
         return
 
     def patch_pkg(self, package, temp, build = None):
-        self.head("Patching Install Package")
+        self.u.head("Patching Install Package")
         print(" ")
         script_path = os.path.dirname(os.path.realpath(__file__))
         print("Expanding package...\n")
-        stat = self.run({"args" : ["pkgutil", "--expand", package, temp + "/package"]})
+        stat = self.r.run({"args" : ["pkgutil", "--expand", package, temp + "/package"]})
         if not stat[2] == 0:
             print("Something went wrong!\n")
             print(stat[1])
@@ -892,11 +749,11 @@ class WebDriver:
             # We have a build - let's do stuff
             print("Patching Kext for {}...".format(build))
             os.chdir(temp + "/package")
-            os.chdir(self.run({"args" : "ls | grep -i nvwebdrivers", "shell" : True})[0].strip())
-            self.run({"args" : ["mkdir", "temp"]})
+            os.chdir(self.r.run({"args" : "ls | grep -i nvwebdrivers", "shell" : True})[0].strip())
+            self.r.run({"args" : ["mkdir", "temp"]})
             os.chdir("temp")
             print("    Extracting Payload...")
-            self.run({"args" : ["tar", "xvf", "../Payload"]})
+            self.r.run({"args" : ["tar", "xvf", "../Payload"]})
             info_path = None
             if os.path.exists("./NVDAStartupWeb.kext/Contents/Info.plist"):
                 info_path = "./NVDAStartupWeb.kext/Contents/Info.plist"
@@ -916,24 +773,24 @@ class WebDriver:
             plist.writePlist(info_plist, os.path.realpath(info_path))
             # Remove the old Payload and BOM
             print("    Removing old Payload and BOM...")
-            self.run({"args" : ["rm", "../Payload"]})
-            self.run({"args" : ["rm", "../BOM"]})
+            self.r.run({"args" : ["rm", "../Payload"]})
+            self.r.run({"args" : ["rm", "../BOM"]})
             # Repacking Payload
             print("    Setting ownership...")
-            stat = self.run({"args" : "sudo chown -R 0:0 ./*", "shell" : True})
+            stat = self.r.run({"args" : "sudo chown -R 0:0 ./*", "shell" : True})
             if not stat[2] == 0:
                 print("Something went wrong!\n")
                 print(stat[1])
                 return
             print("    Repacking Payload...")
-            stat = self.run({"args" : "sudo find . | sudo cpio -o --format odc | gzip -c > ../Payload", "shell" : True})
+            stat = self.r.run({"args" : "sudo find . | sudo cpio -o --format odc | gzip -c > ../Payload", "shell" : True})
             if not stat[2] == 0:
                 print("Something went wrong!\n")
                 print(stat[1])
                 return
             # Generate BOM
             print("    Generating BOM...")
-            stat = self.run({"args" : ["mkbom", "../../", "../BOM"], "sudo" : True})
+            stat = self.r.run({"args" : ["mkbom", "../../", "../BOM"], "sudo" : True})
             if not stat[2] == 0:
                 print("Something went wrong!\n")
                 print(stat[1])
@@ -941,7 +798,7 @@ class WebDriver:
             # Clean up the temp folder
             print("    Cleaning up...\n")
             os.chdir("../")
-            stat = self.run({"args" : ["rm", "-rf","temp"], "sudo" : True})
+            stat = self.r.run({"args" : ["rm", "-rf","temp"], "sudo" : True})
             if not stat[2] == 0:
                 print("Something went wrong!\n")
                 print(stat[1])
@@ -952,33 +809,33 @@ class WebDriver:
         os.chdir(os.path.dirname(os.path.realpath(__file__)))
         os.chdir("../Web Drivers/Patched/")
         suffix = " (Patched).pkg" if build == None else " ({}).pkg".format(build)
-        self.run({"args" : ["pkgutil", "--flatten", temp + "/package", os.getcwd() + "/" + os.path.basename(package)[:-4] + suffix]})
+        self.r.run({"args" : ["pkgutil", "--flatten", temp + "/package", os.getcwd() + "/" + os.path.basename(package)[:-4] + suffix]})
         print("Done.")
-        self.run({"args":["open", os.getcwd()]})
-        time.sleep(5)
+        self.r.run({"args":["open", os.getcwd()]})
+        self.u.grab("",timeout=5)
 
     def remove_drivers(self):
-        self.head("Removing Web Drivers")
+        self.u.head("Removing Web Drivers")
         print(" ")
         print("Clearing web drivers from /S/L/E...\n")
-        self.run({"args":["sudo", "rm", "-rf", "/System/Library/Extensions/GeForce*Web.*", "/System/Library/Extensions/NVDA*Web.kext"], "shell" : True})
+        self.r.run({"args":["sudo", "rm", "-rf", "/System/Library/Extensions/GeForce*Web.*", "/System/Library/Extensions/NVDA*Web.kext"], "shell" : True})
         print("Clearing web drivers from /L/E...\n")
-        self.run({"args":["sudo", "rm", "-rf", "/Library/Extensions/GeForce*Web.kext", "/Library/Extensions/NVDA*Web.kext"], "shell" : True})
+        self.r.run({"args":["sudo", "rm", "-rf", "/Library/Extensions/GeForce*Web.kext", "/Library/Extensions/NVDA*Web.kext"], "shell" : True})
         # Rebuild kextcache
         print("Rebuilding kext cache...\n")
         self.flush_cache()
         print(" ")
         print("Done.")
-        time.sleep(5)
+        self.u.grab("",timeout=5)
 
     def config_menu(self):
-        self.head("Config.plist Patch Menu")
+        self.u.head("Config.plist Patch Menu")
         print(" ")
         os.chdir(os.path.dirname(os.path.realpath(__file__)))
         if not self.wd_loc:
             print("NVDAStartupWeb.kext was not found in either /L/E or /S/L/E!\n")
             print("Please make sure you have the Web Drivers installed.")
-            time.sleep(5)
+            self.u.grab("",timeout=5)
             return
         info_plist = plist.readPlist(self.wd_loc + "/Contents/Info.plist")
         current_build = info_plist.get("IOKitPersonalities", {}).get("NVDAStartup", {}).get("NVDARequiredOS", None)
@@ -1010,19 +867,19 @@ class WebDriver:
         return
 
     def type_menu(self, build):
-        self.head("Config.plist Patch: {}".format(build))
+        self.u.head("Config.plist Patch: {}".format(build))
         print(" ")
         os.chdir(os.path.dirname(os.path.realpath(__file__)))
         if not self.wd_loc:
             print("NVDAStartupWeb.kext was not found in either /L/E or /S/L/E!\n")
             print("Please make sure you have the Web Drivers installed.")
-            time.sleep(5)
+            self.u.grab("",timeout=5)
             return
         info_plist = plist.readPlist(self.wd_loc + "/Contents/Info.plist")
         current_build = info_plist.get("IOKitPersonalities", {}).get("NVDAStartup", {}).get("NVDARequiredOS", None)
         if build == current_build:
             print("Both builds are the same - this defeats the purpose of the patch.")
-            time.sleep(5)
+            self.u.grab("",timeout=5)
             return
         print("B. Show Base64 Values")
         print("H. Show Hex Values")
@@ -1075,7 +932,7 @@ class WebDriver:
             display_text = "\n".join(plist_string.split("\n")[3:-2])
         
         if len(display_text):
-            self.head("Config.plist Patch: {}".format(build))
+            self.u.head("Config.plist Patch: {}".format(build))
             print(" ")
             print("Your {} Data:\n".format(data_type))
             print(display_text)
@@ -1094,21 +951,21 @@ class WebDriver:
 
     def flush_cache(self, p=False):
         if p:
-            self.head("Rebuilding Kext Cache")
+            self.u.head("Rebuilding Kext Cache")
             print(" ")
             # Rebuild kextcache
             print("Rebuilding kext cache...\n")
-        self._stream_output(["sudo", "kextcache", "-i", "/"])
-        self._stream_output(["sudo", "kextcache", "-u", "/"])
+        self.r.run({"args":["sudo", "kextcache", "-i", "/"],"stream":True})
+        self.r.run({"args":["sudo", "kextcache", "-u", "/"],"stream":True})
         if p:
             print(" ")
             print("Done.")
-            time.sleep(5)
+            self.u.grab("",timeout=5)
 
     def main(self):
         self._check_info()
         self.get_system_info()
-        self.head("Web Driver Toolkit")
+        self.u.head("Web Driver Toolkit")
         print(" ")
         os.chdir(os.path.dirname(os.path.realpath(__file__)))
 
@@ -1135,7 +992,7 @@ class WebDriver:
             print("Newest:           " + newest_version)
 
         try:
-            nv = self.run({"args":"nvram -p | grep -i nvda_drv | cut -d$'\t' -f 2", "shell" : True})[0].strip("\n")
+            nv = self.r.run({"args":"nvram -p | grep -i nvda_drv | cut -d$'\t' -f 2", "shell" : True})[0].strip("\n")
         except:
             nv = ""
         aptio_loaded = "Unknown"
@@ -1194,19 +1051,19 @@ class WebDriver:
         elif menu[:1].lower() == "n":
             if nv in ["1","1%00"]:
                 # Unset
-                self.head("Unsetting nvda_drv=1")
+                self.u.head("Unsetting nvda_drv=1")
                 print("")
                 print("Running:\n\nsudo nvram -d nvda_drv")
-                self._stream_output(["sudo", "nvram", "-d", "nvda_drv"])
+                self.r.run({"args":["sudo", "nvram", "-d", "nvda_drv"],"stream":True})
             else:
                 # Set
-                self.head("Setting nvda_drv=1")
+                self.u.head("Setting nvda_drv=1")
                 print("")
                 print("Running:\n\nsudo nvram nvda_drv=1")
-                self._stream_output(["sudo", "nvram", "nvda_drv=1"])
+                self.r.run({"args":["sudo", "nvram", "nvda_drv=1"],"stream":True})
             print("")
             print("Done.")
-            time.sleep(5)
+            self.u.grab("",timeout=5)
         
         return
 
