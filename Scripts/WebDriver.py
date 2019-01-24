@@ -1,8 +1,8 @@
-import plistlib
+import plist
 import sys
 import os
 import time
-import Downloader
+import downloader
 import tempfile
 import shutil
 import subprocess
@@ -37,7 +37,7 @@ class WebDriver:
             print(" ")
             exit(1)
 
-        self.dl = Downloader.Downloader()
+        self.dl = downloader.Downloader()
         self.web_drivers = None
         self.os_build_number = None
         self.os_number = None
@@ -307,10 +307,7 @@ class WebDriver:
                 time.sleep(3)
                 self.web_drivers = {}
                 return
-            if sys.version_info >= (3, 0):
-                self.web_drivers = plistlib.loads(plist_data)
-            else:
-                self.web_drivers = plistlib.readPlistFromString(plist_data)
+            self.web_drivers = plist.loads(plist_data)
         except:
             print("Something went wrong while getting the manifest!\n\nPlease check your intenet connection and try again.")
             time.sleep(3)
@@ -321,7 +318,7 @@ class WebDriver:
         self.os_build_number = self.run({"args" : ["sw_vers", "-buildVersion"]})[0].strip()
         self.os_number       = self.run({"args" : ["sw_vers", "-productVersion"]})[0].strip()
         if self.wd_loc:
-            info_plist = plistlib.readPlist(self.wd_loc + "/Contents/Info.plist")            
+            info_plist = plist.readPlist(self.wd_loc + "/Contents/Info.plist")            
             self.installed_version = info_plist["CFBundleGetInfoString"].split(" ")[-1].replace("(", "").replace(")", "")
 
     def check_dir(self, build):
@@ -554,7 +551,7 @@ class WebDriver:
             print("Please make sure you have the Web Drivers installed.")
             time.sleep(5)
             return
-        info_plist = plistlib.readPlist(self.wd_loc + "/Contents/Info.plist")
+        info_plist = plist.readPlist(self.wd_loc + "/Contents/Info.plist")
         current_build = info_plist.get("IOKitPersonalities", {}).get("NVDAStartup", {}).get("NVDARequiredOS", None)
 
         print("OS Build Number:  {}".format(self.os_build_number))
@@ -681,7 +678,7 @@ class WebDriver:
         # Start our command list
         c = []
 
-        info_plist = plistlib.readPlist(self.wd_loc + "/Contents/Info.plist")
+        info_plist = plist.readPlist(self.wd_loc + "/Contents/Info.plist")
         if not os.path.exists(self.wd_loc + "/Contents/Info.plist.bak"):
             # Create a backup
             self.run({
@@ -689,14 +686,14 @@ class WebDriver:
                 "sudo" : True,
                 "message" : "Creating backup...\n"
             })
-            # plistlib.writePlist(info_plist, self.wd_loc + "/Contents/Info.plist.bak")
+            # plist.writePlist(info_plist, self.wd_loc + "/Contents/Info.plist.bak")
         # Change the build number and write to the main plist
         print("Patching plist for build \"{}\"...\n".format(build_number))
         info_plist["IOKitPersonalities"]["NVDAStartup"]["NVDARequiredOS"] = build_number
         # Make a temp folder for our plist
         temp_folder = tempfile.mkdtemp()
         # Write the changes
-        plistlib.writePlist(info_plist, temp_folder + "/Info.plist")
+        plist.writePlist(info_plist, temp_folder + "/Info.plist")
         # Build and run commands
         c = [
             {
@@ -743,7 +740,7 @@ class WebDriver:
             print("Please make sure you have the Web Drivers installed.")
             time.sleep(5)
             return
-        info_plist = plistlib.readPlist(self.wd_loc + "/Contents/Info.plist")
+        info_plist = plist.readPlist(self.wd_loc + "/Contents/Info.plist")
         current_build = info_plist.get("IOKitPersonalities", {}).get("NVDAStartup", {}).get("NVDARequiredOS", None)
 
         print("OS Build Number:  {}".format(self.os_build_number))
@@ -913,10 +910,10 @@ class WebDriver:
                 return
             print("    Patching Info.plist for {}...".format(build))
             # Got the info.plist - load it and patch it
-            info_plist = plistlib.readPlist(os.path.realpath(info_path))
+            info_plist = plist.readPlist(os.path.realpath(info_path))
             info_plist["IOKitPersonalities"]["NVDAStartup"]["NVDARequiredOS"] = build
             # Write the changes
-            plistlib.writePlist(info_plist, os.path.realpath(info_path))
+            plist.writePlist(info_plist, os.path.realpath(info_path))
             # Remove the old Payload and BOM
             print("    Removing old Payload and BOM...")
             self.run({"args" : ["rm", "../Payload"]})
@@ -983,7 +980,7 @@ class WebDriver:
             print("Please make sure you have the Web Drivers installed.")
             time.sleep(5)
             return
-        info_plist = plistlib.readPlist(self.wd_loc + "/Contents/Info.plist")
+        info_plist = plist.readPlist(self.wd_loc + "/Contents/Info.plist")
         current_build = info_plist.get("IOKitPersonalities", {}).get("NVDAStartup", {}).get("NVDARequiredOS", None)
 
         print("OS Build Number:  {}".format(self.os_build_number))
@@ -1021,7 +1018,7 @@ class WebDriver:
             print("Please make sure you have the Web Drivers installed.")
             time.sleep(5)
             return
-        info_plist = plistlib.readPlist(self.wd_loc + "/Contents/Info.plist")
+        info_plist = plist.readPlist(self.wd_loc + "/Contents/Info.plist")
         current_build = info_plist.get("IOKitPersonalities", {}).get("NVDAStartup", {}).get("NVDARequiredOS", None)
         if build == current_build:
             print("Both builds are the same - this defeats the purpose of the patch.")
@@ -1073,10 +1070,7 @@ class WebDriver:
                 "Find" : self.get_base(current_build),
                 "Replace" : self.get_base(build)
             }
-            if sys.version_info >= (3, 0):
-                plist_string = plistlib.dumps(plist_dict).decode("utf-8")
-            else:
-                plist_string = plistlib.writePlistToString(plist_dict)
+            plist_string = plist.dumps(plist_dict).decode("utf-8")
             # Trim the plist
             display_text = "\n".join(plist_string.split("\n")[3:-2])
         
@@ -1122,7 +1116,7 @@ class WebDriver:
         print("WD Version:       " + self.installed_version)
 
         if self.wd_loc:
-            info_plist = plistlib.readPlist(self.wd_loc + "/Contents/Info.plist")
+            info_plist = plist.readPlist(self.wd_loc + "/Contents/Info.plist")
             current_build = info_plist.get("IOKitPersonalities", {}).get("NVDAStartup", {}).get("NVDARequiredOS", None)
             print("WD Target Build:  {}".format(current_build))
         
